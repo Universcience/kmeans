@@ -96,11 +96,8 @@ void init_means (dpoint* means, dpoint* data, bool sticky)
 			means[i] = (dpoint) {NCLASS+i, rand()%WIDTH, rand()%HEIGHT, NULL};
 }
 
-int main (int argc, char* argv[])
+int main ()
 {
-	// WinSDL2 shenanigans, please ignore.
-	(void) argc; (void) argv;
-
 	// SDL init
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
 
@@ -204,6 +201,10 @@ int main (int argc, char* argv[])
 	SDL_DestroyRenderer(r);
 	SDL_DestroyWindow(mw);
 	SDL_Quit();
+
+	free(centers);
+	free(means);
+	free(data);
 
 	return EXIT_SUCCESS;
 }
