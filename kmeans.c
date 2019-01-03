@@ -1,5 +1,5 @@
 /*  Quick and dirty implementation of the k-means algorithm (SDL2-based).
- *  Copyright (C) 2018 - Jérôme Kirman
+ *  Copyright (C) 2018-2019 - Jérôme Kirman
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of the GNU Affero General Public License as published by
@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <time.h>
 #include <math.h>
 
@@ -40,28 +41,34 @@
 
 // Data point (with pointer to current centroid)
 typedef struct dpoint_s {
-	unsigned class;
-	unsigned x, y;
+	char UNUSED[4];
+	int class;
+	int x, y;
 	struct dpoint_s* nearest;
 } dpoint;
 
 // Class color
-int red   (unsigned cl) { return (cl == 0) ? 255 : 0; }
-int green (unsigned cl) { return (cl == 1) ? 255 : 0; }
-int blue  (unsigned cl) { return (cl == 2) ? 255 : 0; }
+#define   red(cl) ((cl == 0) ? 255u : 0)
+#define green(cl) ((cl == 1) ? 255u : 0)
+#define  blue(cl) ((cl == 2) ? 255u : 0)
+
+int dist (dpoint a, dpoint b);
+dpoint* find_nearest (dpoint datum, dpoint* means);
+void recompute_nearests (dpoint* data, dpoint* means);
+void init_means (dpoint* means, const dpoint* data, bool sticky);
 
 // Euclidian distance
-unsigned dist (dpoint a, dpoint b)
+int dist (dpoint a, dpoint b)
 {
-	unsigned dx = a.x - b.x, dy = a.y - b.y;
-	return (unsigned) sqrt(dx*dx + dy*dy);
+	int dx = a.x - b.x, dy = a.y - b.y;
+	return (int) lrint(sqrt(dx*dx + dy*dy));
 }
 
 // Returns the nearest centroid
 dpoint* find_nearest (dpoint datum, dpoint* means)
 {
-	unsigned nd = -1, ni = -1, d = -1;
-	for (unsigned i = 0 ; i < NCLASS ; ++i) {
+	int nd = INT_MAX, ni = -1, d = -1;
+	for (int i = 0 ; i < NCLASS ; ++i) {
 		d = dist(datum, means[i]);
 		if (d < nd) {
 			nd = d;
@@ -74,29 +81,29 @@ dpoint* find_nearest (dpoint datum, dpoint* means)
 // Recompute centroids for all data
 void recompute_nearests (dpoint* data, dpoint* means)
 {
-	for (unsigned i = 0 ; i < NDOTS ; ++i)
+	for (int i = 0 ; i < NDOTS ; ++i)
 		data[i].nearest = find_nearest(data[i], means);
 }
 
 // Reset centroids to random points (if sticky, use existing data points)
-void init_means (dpoint* means, dpoint* data, bool sticky)
+void init_means (dpoint* means, const dpoint* data, bool sticky)
 {
 	if (sticky) {
-		unsigned rd[NCLASS];
-		for (unsigned i = 0 ; i < NCLASS ; ++i) {
+		int rd[NCLASS];
+		for (int i = 0 ; i < NCLASS ; ++i) {
 			reroll:
 			rd[i] = rand()%NDOTS;
-			for (unsigned j = 0 ; j < i ; ++j)
+			for (int j = 0 ; j < i ; ++j)
 				if (rd[i] == rd[j])
 					goto reroll; // Centroids must differ
-			means[i] = (dpoint) {NCLASS+i, data[rd[i]].x, data[rd[i]].y, NULL};
+			means[i] = (dpoint) {"", NCLASS+i, data[rd[i]].x, data[rd[i]].y, NULL};
 		}
 	} else
-		for (unsigned i = 0 ; i < NCLASS ; ++i)
-			means[i] = (dpoint) {NCLASS+i, rand()%WIDTH, rand()%HEIGHT, NULL};
+		for (int i = 0 ; i < NCLASS ; ++i)
+			means[i] = (dpoint) {"", NCLASS+i, rand()%WIDTH, rand()%HEIGHT, NULL};
 }
 
-int main ()
+int main (void)
 {
 	// SDL init
 	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
@@ -109,10 +116,10 @@ int main ()
 	SDL_Rect border = {0, 0, WIDTH-1, HEIGHT-1};
 
 	// Data init
-	srand(time(NULL));
+	srand((unsigned) time(NULL));
 	dpoint* centers = calloc(NCLASS, sizeof(dpoint));
-	for (unsigned i = 0 ; i < NCLASS ; ++i)
-		centers[i] = (dpoint) {
+	for (int i = 0 ; i < NCLASS ; ++i)
+		centers[i] = (dpoint) {"",
 			i,
 			rand()%( WIDTH - 2*BGAP) + BGAP,
 			rand()%(HEIGHT - 2*BGAP) + BGAP,
@@ -122,8 +129,8 @@ int main ()
 
 	//NOTE: Biased RNG ; don't care.
 	dpoint* data = calloc(NDOTS, sizeof(dpoint));
-	for (unsigned i = 0 ; i < NDOTS; ++i)
-		data[i] = (dpoint) {
+	for (int i = 0 ; i < NDOTS; ++i)
+		data[i] = (dpoint) {"",
 			i%NCLASS,
 			centers[i%NCLASS].x + rand()%(2*CGAP) - CGAP,
 			centers[i%NCLASS].y + rand()%(2*CGAP) - CGAP,
@@ -147,9 +154,9 @@ int main ()
 				recompute_nearests(data, means);
 			} else if (e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_N) {
 				// Next step : recompute means and nearests (press 'n')
-				for (unsigned i = 0 ; i < NCLASS ; ++i) {
-					unsigned sx = 0, sy = 0, nd = 0;
-					for (unsigned j = 0 ; j < NDOTS ; ++j)
+				for (int i = 0 ; i < NCLASS ; ++i) {
+					int sx = 0, sy = 0, nd = 0;
+					for (int j = 0 ; j < NDOTS ; ++j)
 						if (data[j].nearest == &means[i]) {
 							sx += data[j].x;
 							sy += data[j].y;
@@ -170,7 +177,7 @@ int main ()
 		SDL_RenderDrawRect(r, &border);
 
 		// Draw data ; with colors (press 'h')
-		for (unsigned i = 0 ; i < NDOTS ; ++i) {
+		for (int i = 0 ; i < NDOTS ; ++i) {
 			if (SDL_GetKeyboardState(NULL)[SDL_SCANCODE_H])
 				SDL_SetRenderDrawColor(r, red(i%NCLASS), green(i%NCLASS), blue(i%NCLASS), 255);
 			else
@@ -178,11 +185,11 @@ int main ()
 			point.x = data[i].x;
 			point.y = data[i].y;
 			SDL_RenderFillRect(r, &point);
-			unsigned ncl = data[i].nearest->class % NCLASS;
+			long int ncl = data[i].nearest->class % NCLASS;
 			SDL_SetRenderDrawColor(r, (255-red(ncl))/4, (255-green(ncl))/4, (255-blue(ncl))/4, 255);
 			SDL_RenderDrawLine(r, data[i].x+DSIZE/2, data[i].y+DSIZE/2, data[i].nearest->x+DSIZE/2, data[i].nearest->y+DSIZE/2);
 		}
-		for (unsigned i = 0 ; i < NCLASS ; ++i) {
+		for (int i = 0 ; i < NCLASS ; ++i) {
 			// Draw centers (press 'c')
 			SDL_SetRenderDrawColor(r, red(i)/2, green(i)/2, blue(i)/2, 255);
 			point.x = centers[i].x;
